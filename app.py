@@ -1,6 +1,6 @@
 import os
 
-from flask import Flask, request, json, render_template, make_response
+from flask import (g, Flask, request, json, render_template, make_response)
 from json2html import *
 import pandas as pd
 import sqlite3
@@ -12,19 +12,6 @@ DB_FILENAME = 'tmp/database.db'
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
-
-def allowed_file(filename):
-    # https://flask.palletsprojects.com/en/1.1.x/patterns/fileuploads/#uploading-files
-    # restrict files to CSVs
-    is_valid = '.' in filename and \
-               filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-    if not is_valid:
-        # replace with a logging framework eventually
-        print('Filename [%s] is not valid' % filename)
-
-    return is_valid
 
 
 @app.route('/')
@@ -42,7 +29,7 @@ def get_user():
     username = request.cookies.get('username')
 
     # establish a connection to the database
-    conn = sqlite3.connect(DB_FILENAME)
+    conn = get_db()
 
     # if there's no username in the cookie, fetch a user
     if username is None:
@@ -80,7 +67,7 @@ def get_user():
         json_response = user_password_dict
 
     # build a response object before setting cookies
-    resp = make_response(json2html.convert(json = json_response))
+    resp = make_response(json2html.convert(json=json_response))
     resp.set_cookie('username', user[0][0])
     return resp
 
@@ -106,7 +93,7 @@ def load_csv_data():
         )
         return response
 
-    if not allowed_file(file.filename):
+    if not is_allowed_file(file.filename):
         response = app.response_class(
             response=json.dumps({'status': 'error: invalid filename'}),
             status=400,
@@ -117,21 +104,49 @@ def load_csv_data():
     filename = 'userdata.csv'
     file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
 
-    # establish the sqlite3 database from the file
-    # there is no protection from overwriting
-    conn = sqlite3.connect(DB_FILENAME)
-    df=pd.read_csv('tmp/userdata.csv')
+    conn = get_db()
+    df = pd.read_csv('tmp/userdata.csv')
 
-    # add a "claimed" field and initialize it to false
+    # Add extra fields to initialize in the database
     df['claimed'] = False
-    df.to_sql('userinfo',conn, if_exists='replace', index=False)
+
+    # Populate the database with all of the users, re-creating the table if found
+    df.to_sql('userinfo', conn, if_exists='replace', index=False)
 
     response = app.response_class(
-        response=json.dumps({'status':'file uploaded'}),
+        response=json.dumps({'status': 'file uploaded'}),
         status=200,
         mimetype='application/json'
     )
     return response
+
+
+def get_db():
+    db = getattr(g, '_database', None)
+    if db is None:
+        db = g._database = sqlite3.connect(DB_FILENAME)
+    return db
+
+
+
+@app.teardown_appcontext
+def close_connection(exception):
+    db = getattr(g, '_database', None)
+    if db is not None:
+        db.close()
+
+
+def is_allowed_file(filename):
+    # https://flask.palletsprojects.com/en/1.1.x/patterns/fileuploads/#uploading-files
+    # restrict files to CSVs
+    is_valid = '.' in filename and \
+               filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+    if not is_valid:
+        # replace with a logging framework eventually
+        print('Filename [%s] is not valid' % filename)
+
+    return is_valid
 
 
 app.run(debug=True, host='0.0.0.0', port=8080)
