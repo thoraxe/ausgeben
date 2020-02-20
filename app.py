@@ -1,26 +1,24 @@
 import os
-import sys
-from flask import Flask, flash, request, redirect, url_for, json, render_template, make_response
-app = Flask(__name__)
 
-# use pandas to more easily get the CSV into sqlite
-from pandas import DataFrame, read_csv
-import pandas as pd 
+from flask import Flask, request, json, render_template, make_response
+from json2html import *
+import pandas as pd
 import sqlite3
 
-# convert JSON to html tables
-from json2html import *
-
-# configuration
 UPLOAD_FOLDER = 'tmp/'
 ALLOWED_EXTENSIONS = {'csv'}
+
+
+app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# https://flask.palletsprojects.com/en/1.1.x/patterns/fileuploads/#uploading-files
-# restrict files to CSVs
+
 def allowed_file(filename):
+    # https://flask.palletsprojects.com/en/1.1.x/patterns/fileuploads/#uploading-files
+    # restrict files to CSVs
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 @app.route('/')
 def hello_world():
@@ -29,6 +27,7 @@ def hello_world():
     # handle sqlite3 database locking with a lot of people doing the same thing
     # at the same time
     return render_template('hello.html')
+
 
 @app.route('/get_user')
 def get_user():
@@ -39,7 +38,7 @@ def get_user():
     conn = sqlite3.connect("database.db")
 
     # if there's no username in the cookie, fetch a user
-    if username == None:
+    if username is None:
         # grab the first user that is not claimed
         # user ends up being an array with a single tuple inside
         # the database columns are username,password,urls_json_blob,claimed
@@ -67,7 +66,7 @@ def get_user():
 
     user_password_dict = {'Username': username, 'Password': password}
 
-    if json_additional != None:
+    if json_additional is not None:
         json_additional_dict = json.loads(json_additional)
         json_response = dict(user_password_dict, **json_additional_dict)
     else:
@@ -77,6 +76,7 @@ def get_user():
     resp = make_response(json2html.convert(json = json_response))
     resp.set_cookie('username', user[0][0])
     return resp
+
 
 @app.route('/load_csv_data', methods=['POST'])
 def load_csv_data():
