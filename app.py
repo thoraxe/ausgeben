@@ -7,6 +7,7 @@ import sqlite3
 
 UPLOAD_FOLDER = 'tmp/'
 ALLOWED_EXTENSIONS = {'csv'}
+DB_FILENAME = 'tmp/database.db'
 
 
 app = Flask(__name__)
@@ -41,7 +42,7 @@ def get_user():
     username = request.cookies.get('username')
 
     # establish a connection to the database
-    conn = sqlite3.connect("database.db")
+    conn = sqlite3.connect(DB_FILENAME)
 
     # if there's no username in the cookie, fetch a user
     if username is None:
@@ -118,7 +119,7 @@ def load_csv_data():
 
     # establish the sqlite3 database from the file
     # there is no protection from overwriting
-    conn = sqlite3.connect('tmp/database.db')
+    conn = sqlite3.connect(DB_FILENAME)
     df=pd.read_csv('tmp/userdata.csv')
 
     # add a "claimed" field and initialize it to false
