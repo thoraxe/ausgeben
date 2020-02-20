@@ -3,3 +3,4 @@ database.db
 .~lock*
 venv
 __pycache__
+.odo/odo-file-index.json
