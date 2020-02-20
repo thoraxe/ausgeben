@@ -1,0 +1,5 @@
+userdata.csv
+database.db
+.~lock*
+venv
+__pycache__
