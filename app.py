@@ -1,26 +1,31 @@
 import os
-import sys
-from flask import Flask, flash, request, redirect, url_for, json, render_template, make_response
-app = Flask(__name__)
 
-# use pandas to more easily get the CSV into sqlite
-from pandas import DataFrame, read_csv
-import pandas as pd 
+from flask import Flask, request, json, render_template, make_response
+from json2html import *
+import pandas as pd
 import sqlite3
 
-# convert JSON to html tables
-from json2html import *
-
-# configuration
 UPLOAD_FOLDER = 'tmp/'
 ALLOWED_EXTENSIONS = {'csv'}
+DB_FILENAME = 'tmp/database.db'
+
+
+app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# https://flask.palletsprojects.com/en/1.1.x/patterns/fileuploads/#uploading-files
-# restrict files to CSVs
+
 def allowed_file(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    # https://flask.palletsprojects.com/en/1.1.x/patterns/fileuploads/#uploading-files
+    # restrict files to CSVs
+    is_valid = '.' in filename and \
+               filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+    if not is_valid:
+        # replace with a logging framework eventually
+        print('Filename [%s] is not valid' % filename)
+
+    return is_valid
+
 
 @app.route('/')
 def hello_world():
@@ -30,16 +35,17 @@ def hello_world():
     # at the same time
     return render_template('hello.html')
 
+
 @app.route('/get_user')
 def get_user():
     # fetch username from cookie
     username = request.cookies.get('username')
 
     # establish a connection to the database
-    conn = sqlite3.connect("database.db")
+    conn = sqlite3.connect(DB_FILENAME)
 
     # if there's no username in the cookie, fetch a user
-    if username == None:
+    if username is None:
         # grab the first user that is not claimed
         # user ends up being an array with a single tuple inside
         # the database columns are username,password,urls_json_blob,claimed
@@ -67,7 +73,7 @@ def get_user():
 
     user_password_dict = {'Username': username, 'Password': password}
 
-    if json_additional != None:
+    if json_additional is not None:
         json_additional_dict = json.loads(json_additional)
         json_response = dict(user_password_dict, **json_additional_dict)
     else:
@@ -78,41 +84,54 @@ def get_user():
     resp.set_cookie('username', user[0][0])
     return resp
 
+
 @app.route('/load_csv_data', methods=['POST'])
 def load_csv_data():
     if 'file' not in request.files:
         response = app.response_class(
-            response=json.dumps({'status':'error: no file found'}),
-            status=500,
+            response=json.dumps({'status': 'error: no file found'}),
+            status=400,
             mimetype='application/json'
         )
         return response
     file = request.files['file']
+
     # if user does not select file, browser also
     # submit an empty part without filename
     if file.filename == '':
         response = app.response_class(
-            response=json.dumps({'status':'error: no filename'}),
-            status=500,
+            response=json.dumps({'status': 'error: no filename'}),
+            status=400,
             mimetype='application/json'
         )
         return response
-    if file and allowed_file(file.filename):
-        filename = 'userdata.csv'
-        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
 
-        # establish the sqlite3 database from the file
-        # there is no protection from overwriting
-        conn = sqlite3.connect('tmp/database.db')
-        df=pd.read_csv('tmp/userdata.csv')
-
-        # add a "claimed" field and initialize it to false
-        df['claimed'] = False
-        df.to_sql('userinfo',conn, if_exists='replace', index=False)
-
+    if not allowed_file(file.filename):
         response = app.response_class(
-            response=json.dumps({'status':'file uploaded'}),
-            status=200,
+            response=json.dumps({'status': 'error: invalid filename'}),
+            status=400,
             mimetype='application/json'
         )
         return response
+
+    filename = 'userdata.csv'
+    file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+
+    # establish the sqlite3 database from the file
+    # there is no protection from overwriting
+    conn = sqlite3.connect(DB_FILENAME)
+    df=pd.read_csv('tmp/userdata.csv')
+
+    # add a "claimed" field and initialize it to false
+    df['claimed'] = False
+    df.to_sql('userinfo',conn, if_exists='replace', index=False)
+
+    response = app.response_class(
+        response=json.dumps({'status':'file uploaded'}),
+        status=200,
+        mimetype='application/json'
+    )
+    return response
+
+
+app.run(debug=True, host='0.0.0.0', port=8080)
