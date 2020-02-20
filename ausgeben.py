@@ -103,7 +103,7 @@ def load_csv_data():
 
         # establish the sqlite3 database from the file
         # there is no protection from overwriting
-        conn = sqlite3.connect('database.db')
+        conn = sqlite3.connect('tmp/database.db')
         df=pd.read_csv('tmp/userdata.csv')
 
         # add a "claimed" field and initialize it to false
