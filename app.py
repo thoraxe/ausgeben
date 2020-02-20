@@ -16,8 +16,14 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 def allowed_file(filename):
     # https://flask.palletsprojects.com/en/1.1.x/patterns/fileuploads/#uploading-files
     # restrict files to CSVs
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    is_valid = '.' in filename and \
+               filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+    if not is_valid:
+        # replace with a logging framework eventually
+        print('Filename [%s] is not valid' % filename)
+
+    return is_valid
 
 
 @app.route('/')
@@ -82,40 +88,49 @@ def get_user():
 def load_csv_data():
     if 'file' not in request.files:
         response = app.response_class(
-            response=json.dumps({'status':'error: no file found'}),
-            status=500,
+            response=json.dumps({'status': 'error: no file found'}),
+            status=400,
             mimetype='application/json'
         )
         return response
     file = request.files['file']
+
     # if user does not select file, browser also
     # submit an empty part without filename
     if file.filename == '':
         response = app.response_class(
-            response=json.dumps({'status':'error: no filename'}),
-            status=500,
+            response=json.dumps({'status': 'error: no filename'}),
+            status=400,
             mimetype='application/json'
         )
         return response
-    if file and allowed_file(file.filename):
-        filename = 'userdata.csv'
-        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
 
-        # establish the sqlite3 database from the file
-        # there is no protection from overwriting
-        conn = sqlite3.connect('tmp/database.db')
-        df=pd.read_csv('tmp/userdata.csv')
-
-        # add a "claimed" field and initialize it to false
-        df['claimed'] = False
-        df.to_sql('userinfo',conn, if_exists='replace', index=False)
-
+    if not allowed_file(file.filename):
         response = app.response_class(
-            response=json.dumps({'status':'file uploaded'}),
-            status=200,
+            response=json.dumps({'status': 'error: invalid filename'}),
+            status=400,
             mimetype='application/json'
         )
         return response
+
+    filename = 'userdata.csv'
+    file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+
+    # establish the sqlite3 database from the file
+    # there is no protection from overwriting
+    conn = sqlite3.connect('tmp/database.db')
+    df=pd.read_csv('tmp/userdata.csv')
+
+    # add a "claimed" field and initialize it to false
+    df['claimed'] = False
+    df.to_sql('userinfo',conn, if_exists='replace', index=False)
+
+    response = app.response_class(
+        response=json.dumps({'status':'file uploaded'}),
+        status=200,
+        mimetype='application/json'
+    )
+    return response
 
 
 app.run(debug=True, host='0.0.0.0', port=8080)
