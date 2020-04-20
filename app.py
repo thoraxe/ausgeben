@@ -132,6 +132,3 @@ def load_csv_data():
         mimetype='application/json'
     )
     return response
-
-
-app.run(debug=True, host='0.0.0.0', port=8080)
